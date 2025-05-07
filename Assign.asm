@@ -23,9 +23,22 @@
     platePrompt     DB 'Enter Plate (max 8 chars): $'
     mileagePrompt   DB 'Enter Mileage: $'
     typePrompt      DB 'Enter Type (1=Saloon,2=SUV,3=Sports Car,4=Truck): $'
+    plateTitle DB 'Plate: $'
+    mileageTitle DB 'Mileage: $'
+    matchesTitle DB ' Cars Found!$'
+    positionTitle DB 'Position: $'
+    typeTitle DB 'Type: $'
+    slotTitle DB 'Vehicle in Slot order: $'
     
+    saloonTitle DB 'Saloon$'
+    suvTitle DB 'SUV$'
+    sportsTitle DB 'Sports Car$'
+    truckTitle DB 'Truck$'
+    totalVechTitle DB ' Total Vehicles$'
+    seperator DB '----------------$'
 
     ; Main menu definitions
+    
     menuOption1 DB '1) Add New Vehicle$'
     menuOption2 DB '2) List Vehicles by Type$'
     menuOption3 DB '3) View Vehicle by Position$'
@@ -43,6 +56,13 @@
     listPrompt DB 'Enter a number (1-5)$'
     listMenu DW OFFSET listOpt1, OFFSET listOpt2, OFFSET listOpt3, OFFSET listOpt4,OFFSET listOpt5
     listMenuSize DW 5
+        
+    carArt       DB '            _______', 13, 10
+                 DB '           //  ||\ \', 13, 10
+                 DB '     _____//___||_\ \___', 13, 10
+                 DB '     )  *          *    \', 13, 10
+                 DB '     |_/ \________/ \___|', 13, 10
+                 DB '    ___\_/________\_/______', 13, 10, '$'
     
     CRLF DB 13,10,'$'
 
@@ -137,6 +157,7 @@ MAIN PROC
 
 startMenu:
     ClearScreen
+    PrintString carArt
     DisplayMenu mainMenu, mainMenuSize
     PrintString menuPrompt
     mov ah,01h        
@@ -150,38 +171,46 @@ startMenu:
 
     ; jump to routines based on input
     cmp bl, 1
-    je AddVehicle
+    jne notOption1
+    jmp AddVehicle
+notOption1:
     cmp bl, 2
+    jne notOption2
     jmp ListByType
+notOption2:
     cmp bl, 3
+    jne notOption3
     jmp ViewByPosition
+notOption3:
     cmp bl, 4
+    jne notOption4
     jmp RemoveVehicle
+notOption4:
     cmp bl, 5
+    jne invalidChoice
     jmp ExitProgram
-
+invalidChoice:
     ; Invalid choice
     PrintString wrongInputMsg
+    PressKeyToContinue
     jmp startMenu
 MAIN ENDP
 
 ;-----------------------------
 ; Subroutines
 AddVehicle PROC
-    ; Check car capacity
+    ;capacity
     mov ax, carCount
     cmp ax, MAX_CARS
     jb notFullLot
     jmp fullLot
+
 notFullLot:
-    
     ; Input plate number
     PrintString platePrompt
     lea dx, plateInput
     mov ah, 0Ah
     int 21h
-    
-    ; Add newline after input
     PrintString CRLF
     
     ; Input mileage
@@ -189,8 +218,6 @@ notFullLot:
     lea dx, mileInput
     mov ah, 0Ah
     int 21h
-    
-    ; Add newline after input
     PrintString CRLF
     
     ; Input vehicle type
@@ -208,20 +235,14 @@ typeAtLeast1:
     jbe typeValid
     jmp invalidType
 typeValid:
-    
     ; Store vehicle type
     mov bl, al
-    
-    ; Add newline after input
     PrintString CRLF
-    
-    ; Calculate position to store data
+    ; position to store data
     mov si, carCount
-    
     ; Store car type
     mov di, si
     mov [carType + di], bl
-    
     ; Store car slot/index
     mov [carSlot + di], bl
     
@@ -231,7 +252,6 @@ typeValid:
     mov bl, [mileInput + 1]  ; Get length of entered string
     mov cx, bx              ; Set counter to length
     mov si, 2               ; Start at first digit
-    
 convertMileage:
     xor bx, bx
     mov bl, [mileInput + si]
@@ -263,7 +283,7 @@ convertMileage:
     mov di, ax
     
 copyPlate:
-    ; Check if we've reached the end of the entered plate
+    ; Check if end of the entered plate
     mov al, [plateInput + 1]    ; Get length of entered text
     cmp bl, al                  ; Compare with current position
     jae padSpace                ; If we're beyond input, pad with spaces
@@ -318,8 +338,8 @@ ListByType PROC
     ; Discard the carriage return
     mov ah, 01h
     int 21h
-    
-    ; Check if selection is valid (1-5)
+   
+    ;selection is valid (1-5)
     cmp bl, 1
     jge validMin
     jmp invalidListOption
@@ -329,7 +349,7 @@ validMin:
     jmp invalidListOption
 validOption:
     
-    ; Return to main menu if option 5
+    ; Return option 5
     cmp bl, 5
     jne notReturnOption
     jmp returnToMenu
@@ -348,11 +368,13 @@ notReturnOption:
     
 haveCars:
     ; Display header
+    ClearScreen
     PrintString CRLF
     PrintString CRLF
     
     ; Initialize counter for matches found
     xor cx, cx
+    mov bh, bl      ; Save selected type in BH for comparison
     
     ; Loop through all vehicles
     mov si, 0
@@ -366,7 +388,7 @@ continueTypeLoop:
     ; Check if current car matches the requested type
     mov di, si
     mov al, [carType + di]
-    cmp al, bl
+    cmp al, bh      ; Compare with saved type in BH
     je typeMatches
     jmp nextCar
 typeMatches:
@@ -383,31 +405,17 @@ typeMatches:
     int 21h
     
     ; Print "Plate: "
-    mov dl, 'P'
-    mov ah, 02h
-    int 21h
-    mov dl, 'l'
-    int 21h
-    mov dl, 'a'
-    int 21h
-    mov dl, 't'
-    int 21h
-    mov dl, 'e'
-    int 21h
-    mov dl, ':'
-    int 21h
-    mov dl, ' '
-    int 21h
+    PrintString plateTitle
     
     ; Print plate number
+    push bx         ; Save BX (contains type)
+    push cx         ; Save CX (match counter)
+    push si         ; Save SI (car index)
+    
     mov ax, si
     mov bx, 8
     mul bx
     mov di, ax
-    
-    ; Save match counter and current vehicle index
-    push cx   ; Save match counter
-    push si   ; Save current vehicle index
     
     mov cx, 8       ; Set loop counter for plate chars
     
@@ -419,33 +427,12 @@ printPlate:
     loop printPlate
     
     ; Print ", Mileage: "
-    mov dl, ','
-    mov ah, 02h
-    int 21h
-    mov dl, ' '
-    int 21h
-    mov dl, 'M'
-    int 21h
-    mov dl, 'i'
-    int 21h
-    mov dl, 'l'
-    int 21h
-    mov dl, 'e'
-    int 21h
-    mov dl, 'a'
-    int 21h
-    mov dl, 'g'
-    int 21h
-    mov dl, 'e'
-    int 21h
-    mov dl, ':'
-    int 21h
-    mov dl, ' '
-    int 21h
+    PrintString mileageTitle
     
-    ; Restore vehicle index to get mileage
+    
+    ; Retrieve car index
     pop si
-    push si   ; Save it again for later
+    push si         ; Keep it on stack
     
     ; Print mileage
     mov di, si
@@ -456,9 +443,7 @@ printPlate:
     ; First, determine number of digits by dividing by 10 repeatedly
     mov bx, 10
     xor dx, dx
-    
-    ; Save match counter again (it's still on the stack)
-    xor cx, cx      ; Reset cx for digit counting
+    mov cx, 0       ; Digit counter
     
 countDigits:
     xor dx, dx
@@ -468,17 +453,22 @@ countDigits:
     test ax, ax
     jnz countDigits
     
-    ; Now pop digits and print them
+    ; Save count in BL
+    mov bl, cl 
+    
+    ;pop digits and print
 printDigits:
     pop dx
     add dl, '0'
     mov ah, 02h
     int 21h
-    loop printDigits
+    dec bl
+    jnz printDigits
     
-    ; Restore vehicle index and match counter
-    pop si    ; Restore vehicle index
-    pop cx    ; Restore match counter
+    ; Restore all registers
+    pop si          ; Restore SI (car index)
+    pop cx          ; Restore CX (match counter)
+    pop bx          ; Restore BX (type)
     
 nextCar:
     inc si
@@ -487,13 +477,38 @@ nextCar:
 endTypeLoop:
     ; Check if any matches were found
     test cx, cx
-    jz noMatchesFound
-    jmp listDone
-    
-noMatchesFound:
+    jnz matchesFound
     ; No matches found
     PrintString CRLF
     PrintString wrongInputMsg
+    jmp listDone
+    
+matchesFound:
+    PrintString CRLF
+    PrintString CRLF
+    
+    ; Convert match count to ASCII digits
+    mov ax, cx
+    mov bx, 10
+    xor cx, cx
+    
+countDigitsMatch:
+    xor dx, dx
+    div bx
+    push dx
+    inc cx
+    test ax, ax
+    jnz countDigitsMatch
+    
+printDigitsMatch:
+    pop dx
+    add dl, '0'
+    mov ah, 02h
+    int 21h
+    loop printDigitsMatch
+    
+    PrintString matchesTitle
+    
     jmp listDone
     
 invalidListOption:
@@ -510,9 +525,173 @@ returnToMenu:
 ListByType ENDP
 
 
+
+
 ViewByPosition PROC
-    ;-
-    PrintString correctMsg
+    ClearScreen
+    
+    ; Check if any vehicles exist first
+    cmp carCount, 0
+    jne hasVehicles
+    
+    PrintString CRLF
+    PrintString CRLF
+    PrintString wrongInputMsg
+    PrintString CRLF
+    jmp viewDone
+    
+hasVehicles:
+    PrintString CRLF
+    PrintString CRLF
+    ; Print header for vehicle list
+    PrintString slotTitle
+    PrintString CRLF
+    
+    ; Loop through all vehicles by index
+    mov si, 0
+    
+displayLoop:
+    ; Fix for jump range issue - use negative conditions for near jumps
+    cmp si, carCount
+    jb continueDisplay  ; If below carCount, continue
+    jmp displayDone     ; Otherwise, we're done
+continueDisplay:
+    
+  
+    PrintString CRLF
+    
+    ; Print "Position: "
+    PrintString positionTitle
+    
+    ; Print position number - fix the operand type mismatch
+    ; Cannot directly move SI to DL since they're different sizes
+    mov ax, si       ; First move SI to AX (same size)
+    add al, '0'      ; Convert to ASCII 
+    mov dl, al       ; Now move the lower part (AL) to DL
+    mov ah, 02h
+    int 21h
+    
+    PrintString CRLF
+    
+    ; Print "Plate: "
+    PrintString plateTitle
+    
+    ; Print plate number
+    push si             ; Save position index
+    
+    mov ax, si
+    mov bx, 8
+    mul bx              ; Multiply by 8 for plate offset
+    mov di, ax
+    
+    mov cx, 8           ; 8 characters for plate
+printPlatePos:
+    mov dl, [carPlate + di]
+    mov ah, 02h
+    int 21h
+    inc di
+    loop printPlatePos
+    
+    PrintString CRLF
+    
+    ; Print "Type: "
+    PrintString typeTitle
+    
+    ; Restore position
+    pop si
+    push si             ; Save 
+    
+    ; Get vehicle type
+    mov al, [carType + si]
+    ; Convert type text
+    cmp al, 1
+    jne notType1
+    PrintString saloonTitle
+    jmp typePrinted
+    
+notType1:
+    cmp al, 2
+    jne notType2
+    PrintString suvTitle
+    jmp typePrinted
+    
+notType2:
+    cmp al, 3
+    jne notType3
+    PrintString sportsTitle
+    jmp typePrinted
+    
+notType3:
+    ; Must be type 4
+    PrintString truckTitle
+    
+typePrinted:
+    PrintString CRLF
+    
+    ; Print "Mileage: "
+    PrintString mileageTitle
+    
+    ; Restore position
+    pop si
+    ; Get mileage
+    mov di, si
+    shl di, 1           ; Multiply by 2 for word offset
+    mov ax, [carMileage + di]
+    ; Convert to decimal string
+    mov bx, 10
+    xor cx, cx          ; Digit counter
+    
+countDigitsPos:
+    xor dx, dx
+    div bx
+    push dx             ; Push remainder (digit)
+    inc cx
+    test ax, ax
+    jnz countDigitsPos
+    
+    ; Print digits
+printDigitsPos:
+    pop dx
+    add dl, '0'
+    mov ah, 02h
+    int 21h
+    loop printDigitsPos
+    
+    ; Print divider
+    PrintString CRLF
+    PrintString seperator
+    
+    ;next vehicle
+    inc si
+    jmp displayLoop
+    
+displayDone:
+    PrintString CRLF
+    PrintString totalVechTitle
+    
+    ;carCount to decimal string
+    mov ax, carCount
+    mov bx, 10
+    xor cx, cx
+    
+countDigitsTotal:
+    xor dx, dx
+    div bx
+    push dx
+    inc cx
+    test ax, ax
+    jnz countDigitsTotal
+    
+printDigitsTotal:
+    pop dx
+    add dl, '0'
+    mov ah, 02h
+    int 21h
+    loop printDigitsTotal
+    
+viewDone:
+    PrintString CRLF
+    PrintString CRLF
     PressKeyToContinue
     jmp startMenu
 ViewByPosition ENDP
