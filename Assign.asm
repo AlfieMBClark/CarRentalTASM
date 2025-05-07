@@ -249,8 +249,8 @@ typeValid:
     ; Store mileage - convert ASCII to binary
     xor ax, ax
     xor bx, bx
-    mov bl, [mileInput + 1]  ; Get length of entered string
-    mov cx, bx              ; Set counter to length
+    mov bl, [mileInput + 1]  ; length of entered string
+    mov cx, bx              ; counter to length
     mov si, 2               ; Start at first digit
 convertMileage:
     xor bx, bx
@@ -335,7 +335,6 @@ ListByType PROC
     sub al, '0'
     mov bl, al
     
-    ; Discard the carriage return
     mov ah, 01h
     int 21h
    
@@ -355,7 +354,7 @@ validOption:
     jmp returnToMenu
 notReturnOption:
     
-    ; bl now contains the selected vehicle type (1-4)
+    ; bl selected vehicle type 
     ; Check if any vehicles exist
     cmp carCount, 0
     jne haveCars
@@ -372,11 +371,11 @@ haveCars:
     PrintString CRLF
     PrintString CRLF
     
-    ; Initialize counter for matches found
+    ;counter for matches found
     xor cx, cx
-    mov bh, bl      ; Save selected type in BH for comparison
+    mov bh, bl      ; Save type in BH 
     
-    ; Loop through all vehicles
+    ; Loop
     mov si, 0
     
 carTypeLoop:
@@ -388,7 +387,7 @@ continueTypeLoop:
     ; Check if current car matches the requested type
     mov di, si
     mov al, [carType + di]
-    cmp al, bh      ; Compare with saved type in BH
+    cmp al, bh      ; Compare  saved type in BH
     je typeMatches
     jmp nextCar
 typeMatches:
@@ -396,10 +395,7 @@ typeMatches:
     ; Match found - increment match counter
     inc cx
     
-    ; Display details
-    ; Format: Plate: [plate], Mileage: [mileage]
-    
-    ; Print newline
+
     lea dx, CRLF
     mov ah, 09h
     int 21h
@@ -408,9 +404,9 @@ typeMatches:
     PrintString plateTitle
     
     ; Print plate number
-    push bx         ; Save BX (contains type)
-    push cx         ; Save CX (match counter)
-    push si         ; Save SI (car index)
+    push bx         ; BX (contains type)
+    push cx         ; CX (match counter)
+    push si         ; SI (car index)
     
     mov ax, si
     mov bx, 8
@@ -448,15 +444,15 @@ printPlate:
 countDigits:
     xor dx, dx
     div bx
-    push dx         ; Push remainder (digit)
+    push dx         
     inc cx
     test ax, ax
     jnz countDigits
     
-    ; Save count in BL
+    ; Save count
     mov bl, cl 
     
-    ;pop digits and print
+    ;pop digit and print
 printDigits:
     pop dx
     add dl, '0'
@@ -465,7 +461,7 @@ printDigits:
     dec bl
     jnz printDigits
     
-    ; Restore all registers
+    ; Restore 
     pop si          ; Restore SI (car index)
     pop cx          ; Restore CX (match counter)
     pop bx          ; Restore BX (type)
@@ -475,7 +471,7 @@ nextCar:
     jmp carTypeLoop
     
 endTypeLoop:
-    ; Check if any matches were found
+    ; Find matches
     test cx, cx
     jnz matchesFound
     ; No matches found
@@ -529,8 +525,7 @@ ListByType ENDP
 
 ViewByPosition PROC
     ClearScreen
-    
-    ; Check if any vehicles exist first
+   
     cmp carCount, 0
     jne hasVehicles
     
@@ -543,24 +538,21 @@ ViewByPosition PROC
 hasVehicles:
     PrintString CRLF
     PrintString CRLF
-    ; Print header for vehicle list
     PrintString slotTitle
     PrintString CRLF
     
-    ; Loop through all vehicles by index
+    ; Loop through
     mov si, 0
     
 displayLoop:
-    ; Fix for jump range issue - use negative conditions for near jumps
     cmp si, carCount
-    jb continueDisplay  ; If below carCount, continue
-    jmp displayDone     ; Otherwise, we're done
+    jb continueDisplay 
+    jmp displayDone    
 continueDisplay:
     
   
     PrintString CRLF
     
-    ; Print "Position: "
     PrintString positionTitle
     
     ; Print position number - fix the operand type mismatch
@@ -573,18 +565,16 @@ continueDisplay:
     
     PrintString CRLF
     
-    ; Print "Plate: "
     PrintString plateTitle
     
-    ; Print plate number
-    push si             ; Save position index
+    push si             
     
     mov ax, si
     mov bx, 8
-    mul bx              ; Multiply by 8 for plate offset
+    mul bx              ;8 for plate offset
     mov di, ax
     
-    mov cx, 8           ; 8 characters for plate
+    mov cx, 8           ; 8 plate
 printPlatePos:
     mov dl, [carPlate + di]
     mov ah, 02h
@@ -594,16 +584,16 @@ printPlatePos:
     
     PrintString CRLF
     
-    ; Print "Type: "
+
     PrintString typeTitle
     
     ; Restore position
     pop si
-    push si             ; Save 
+    push si             
     
-    ; Get vehicle type
+    ;vehicle type
     mov al, [carType + si]
-    ; Convert type text
+    ;type text
     cmp al, 1
     jne notType1
     PrintString saloonTitle
@@ -622,29 +612,27 @@ notType2:
     jmp typePrinted
     
 notType3:
-    ; Must be type 4
     PrintString truckTitle
     
 typePrinted:
     PrintString CRLF
     
-    ; Print "Mileage: "
     PrintString mileageTitle
     
-    ; Restore position
+    ; Restore
     pop si
-    ; Get mileage
+    ;Get mileage
     mov di, si
-    shl di, 1           ; Multiply by 2 for word offset
+    shl di, 1           ; word offset
     mov ax, [carMileage + di]
-    ; Convert to decimal string
+    ;dec string
     mov bx, 10
-    xor cx, cx          ; Digit counter
+    xor cx, cx          ;counter
     
 countDigitsPos:
     xor dx, dx
     div bx
-    push dx             ; Push remainder (digit)
+    push dx             ; Push remainder
     inc cx
     test ax, ax
     jnz countDigitsPos
