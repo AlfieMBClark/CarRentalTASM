@@ -9,6 +9,7 @@
     carMileage   DW    MAX_CARS DUP(0)
     carType      DB    MAX_CARS DUP(0) 
     carSlot      DB    MAX_CARS DUP(0)    ; insertion index
+    carRented    DB    MAX_CARS DUP(0)    ; 1=rented, 0=available
 
     ;buffer
     plateInput DB 8,0,8 DUP(0)
@@ -23,17 +24,25 @@
     platePrompt     DB 'Enter Plate (max 8 chars): $'
     mileagePrompt   DB 'Enter Mileage: $'
     typePrompt      DB 'Enter Type (1=Saloon,2=SUV,3=Sports Car,4=Truck): $'
+    rentalPrompt    DB 'Is car rented? (0=Available, 1=Rented): $'
+    updatePrompt    DB 'Enter vehicle position to update: $'
+    newStatusPrompt DB 'Enter new status (0=Available, 1=Rented): $'
+    noVehiclesMsg   DB 'No vehicles in inventory!$'
+    invalidPosMsg   DB 'Invalid vehicle position!$'
     plateTitle DB 'Plate: $'
     mileageTitle DB 'Mileage: $'
     matchesTitle DB ' Cars Found!$'
     positionTitle DB 'Position: $'
     typeTitle DB 'Type: $'
+    rentalTitle DB 'Status: $'
     slotTitle DB 'Vehicle in Slot order: $'
     
     saloonTitle DB 'Saloon$'
     suvTitle DB 'SUV$'
     sportsTitle DB 'Sports Car$'
     truckTitle DB 'Truck$'
+    availableTitle DB 'Available$'
+    rentedTitle DB 'Rented$'
     totalVechTitle DB ' Total Vehicles$'
     seperator DB '----------------$'
 
@@ -42,7 +51,7 @@
     menuOption1 DB '1) Add New Vehicle$'
     menuOption2 DB '2) List Vehicles by Type$'
     menuOption3 DB '3) View Vehicle by Position$'
-    menuOption4 DB '4) Remove Vehicle$'
+    menuOption4 DB '4) Update Vehicle Availability$'
     menuOption5 DB '5) Exit Program$'
     mainMenu    DW OFFSET menuOption1, OFFSET menuOption2, OFFSET menuOption3, OFFSET menuOption4, OFFSET menuOption5
     mainMenuSize DW 5
@@ -184,7 +193,7 @@ notOption2:
 notOption3:
     cmp bl, 4
     jne notOption4
-    jmp RemoveVehicle
+    jmp UpdateAvailability
 notOption4:
     cmp bl, 5
     jne invalidChoice
@@ -238,6 +247,25 @@ typeValid:
     ; Store vehicle type
     mov bl, al
     PrintString CRLF
+    
+    ; Input rental status
+    PrintString rentalPrompt
+    mov ah, 01h
+    int 21h
+    sub al, '0'        ; Convert ASCII to number
+    
+    ; Validate rental status (must be 0 or 1)
+    cmp al, 0
+    je rentalValid
+    cmp al, 1
+    je rentalValid
+    jmp invalidRental   ; Handle invalid rental status
+    
+rentalValid:
+    ; Store rental status
+    mov bh, al  ; Save rental status in BH (BL already has vehicle type)
+    PrintString CRLF
+    
     ; position to store data
     mov si, carCount
     ; Store car type
@@ -245,6 +273,8 @@ typeValid:
     mov [carType + di], bl
     ; Store car slot/index
     mov [carSlot + di], bl
+    ; Store rental status
+    mov [carRented + di], bh
     
     ; Store mileage - convert ASCII to binary
     xor ax, ax
@@ -315,6 +345,11 @@ fullLot:
     jmp addDone
     
 invalidType:
+    PrintString wrongInputMsg
+    jmp addDone
+    
+invalidRental:
+    PrintString CRLF
     PrintString wrongInputMsg
     
 addDone:
@@ -461,6 +496,25 @@ printDigits:
     dec bl
     jnz printDigits
     
+    ; Print rental status
+    PrintString CRLF
+    PrintString rentalTitle
+    
+    ; Get rental status
+    pop si          ; Restore SI (car index)
+    push si         ; Keep it on stack again
+    
+    mov al, [carRented + si]
+    cmp al, 1
+    je isRentedList
+    PrintString availableTitle
+    jmp statusPrintedList
+    
+isRentedList:
+    PrintString rentedTitle
+    
+statusPrintedList:
+    
     ; Restore 
     pop si          ; Restore SI (car index)
     pop cx          ; Restore CX (match counter)
@@ -519,8 +573,6 @@ listDone:
 returnToMenu:
     jmp startMenu
 ListByType ENDP
-
-
 
 
 ViewByPosition PROC
@@ -621,6 +673,8 @@ typePrinted:
     
     ; Restore
     pop si
+    push si             ; Keep SI on stack
+    
     ;Get mileage
     mov di, si
     shl di, 1           ; word offset
@@ -645,9 +699,33 @@ printDigitsPos:
     int 21h
     loop printDigitsPos
     
+    PrintString CRLF
+    
+    ; Print rental status
+    PrintString rentalTitle
+    
+    ; Restore SI (car index)
+    pop si
+    push si             ; Keep SI on stack
+    
+    ; Get rental status
+    mov al, [carRented + si]
+    cmp al, 1
+    je isRented
+    PrintString availableTitle
+    jmp statusPrinted
+    
+isRented:
+    PrintString rentedTitle
+    
+statusPrinted:
+    
     ; Print divider
     PrintString CRLF
     PrintString seperator
+    
+    ; Restore position index
+    pop si
     
     ;next vehicle
     inc si
@@ -681,15 +759,293 @@ viewDone:
     PrintString CRLF
     PrintString CRLF
     PressKeyToContinue
-    jmp startMenu
+    jmp startMenu        ; Always go back to the main menu
 ViewByPosition ENDP
 
-RemoveVehicle PROC
-    ;-
+UpdateAvailability PROC
+    ; Check if there are any vehicles
+    cmp carCount, 0
+    jne hasVehiclesUpdate
+    
+    PrintString CRLF
+    PrintString noVehiclesMsg
+    jmp updateDone
+    
+hasVehiclesUpdate:
+    ; First display all vehicles
+    ClearScreen
+    PrintString CRLF
+    PrintString CRLF
+    PrintString slotTitle
+    PrintString CRLF
+    
+    ; Loop through vehicles
+    mov si, 0
+    
+displayUpdateLoop:
+    cmp si, carCount
+    jb continueUpdateDisplay
+    jmp displayUpdateDone    
+continueUpdateDisplay:
+    
+    PrintString CRLF
+    
+    PrintString positionTitle
+    
+    ; Print position number
+    mov ax, si       
+    add al, '0'      
+    mov dl, al       
+    mov ah, 02h
+    int 21h
+    
+    PrintString CRLF
+    
+    PrintString plateTitle
+    
+    push si             
+    
+    mov ax, si
+    mov bx, 8
+    mul bx              
+    mov di, ax
+    
+    mov cx, 8           
+    
+printPlateUpdate:
+    mov dl, [carPlate + di]
+    mov ah, 02h
+    int 21h
+    inc di
+    loop printPlateUpdate
+    
+    PrintString CRLF
+    
+    PrintString typeTitle
+    
+    ; Restore position
+    pop si
+    push si             
+    
+    ; Vehicle type
+    mov al, [carType + si]
+    ; Type text
+    cmp al, 1
+    jne notUpdateType1
+    PrintString saloonTitle
+    jmp updateTypePrinted
+    
+notUpdateType1:
+    cmp al, 2
+    jne notUpdateType2
+    PrintString suvTitle
+    jmp updateTypePrinted
+    
+notUpdateType2:
+    cmp al, 3
+    jne notUpdateType3
+    PrintString sportsTitle
+    jmp updateTypePrinted
+    
+notUpdateType3:
+    PrintString truckTitle
+    
+updateTypePrinted:
+    PrintString CRLF
+    
+    PrintString mileageTitle
+    
+    ; Restore
+    pop si
+    push si             
+    
+    ; Get mileage
+    mov di, si
+    shl di, 1           
+    mov ax, [carMileage + di]
+    
+    ; Decimal string
+    mov bx, 10
+    xor cx, cx          
+    
+updateCountDigits:
+    xor dx, dx
+    div bx
+    push dx             
+    inc cx
+    test ax, ax
+    jnz updateCountDigits
+    
+updatePrintDigits:
+    pop dx
+    add dl, '0'
+    mov ah, 02h
+    int 21h
+    loop updatePrintDigits
+    
+    PrintString CRLF
+    
+    ; Print rental status
+    PrintString rentalTitle
+    
+    ; Restore SI (car index)
+    pop si
+    push si             
+    
+    ; Get rental status
+    mov al, [carRented + si]
+    cmp al, 1
+    je updateIsRented
+    PrintString availableTitle
+    jmp updateStatusPrinted
+    
+updateIsRented:
+    PrintString rentedTitle
+    
+updateStatusPrinted:
+    
+    ; Print divider
+    PrintString CRLF
+    PrintString seperator
+    
+    ; Restore position index
+    pop si
+    
+    ; Next vehicle
+    inc si
+    jmp displayUpdateLoop
+    
+displayUpdateDone:
+    PrintString CRLF
+    PrintString totalVechTitle
+    
+    ; carCount to decimal string
+    mov ax, carCount
+    mov bx, 10
+    xor cx, cx
+    
+updateCountTotal:
+    xor dx, dx
+    div bx
+    push dx
+    inc cx
+    test ax, ax
+    jnz updateCountTotal
+    
+updatePrintTotal:
+    pop dx
+    add dl, '0'
+    mov ah, 02h
+    int 21h
+    loop updatePrintTotal
+    
+    ; Now ask for position to update
+    PrintString CRLF
+    PrintString CRLF
+    PrintString updatePrompt
+    
+    ; Get the position from user
+    mov ah, 01h
+    int 21h
+    sub al, '0'        ; Convert ASCII to number
+    
+    ; Validate position (must be between 0 and carCount-1)
+    cmp al, 0
+    jge posAtLeastZero
+    ; If position < 0, it's invalid
+    jmp invalidPos
+    
+posAtLeastZero:
+    ; Create a copy of carCount in BL for comparison
+    mov bx, carCount
+    dec bx              ; BX = carCount - 1
+    
+    cmp al, bl
+    jle posValid
+    ; If position > carCount-1, it's invalid
+    jmp invalidPos
+    
+posValid:
+    ; Position is valid - store it in SI
+    mov ah, 0           ; Clear high bits of AX
+    mov si, ax
+    
+    ; Display the current status of the vehicle
+    PrintString CRLF
+    PrintString plateTitle
+    
+    ; Calculate position in carPlate array
+    push si             ; Save SI
+    mov ax, si
+    mov bx, 8
+    mul bx
+    mov di, ax
+    
+    ; Print plate
+    mov cx, 8
+printPlateSelected:
+    mov dl, [carPlate + di]
+    mov ah, 02h
+    int 21h
+    inc di
+    loop printPlateSelected
+    
+    ; Print current status
+    PrintString CRLF
+    PrintString rentalTitle
+    
+    pop si              ; Restore SI
+    push si             ; Save it again
+    
+    mov al, [carRented + si]
+    cmp al, 1
+    je currentlyRented
+    PrintString availableTitle
+    jmp promptNewStatus
+    
+currentlyRented:
+    PrintString rentedTitle
+    
+promptNewStatus:
+    ; Ask for new status
+    PrintString CRLF
+    PrintString newStatusPrompt
+    
+    ; Get new status
+    mov ah, 01h
+    int 21h
+    sub al, '0'        ; Convert ASCII to number
+    
+    ; Validate new status (must be 0 or 1)
+    cmp al, 0
+    je statusValid
+    cmp al, 1
+    je statusValid
+    
+    ; Invalid status
+    PrintString CRLF
+    PrintString wrongInputMsg
+    pop si              ; Remove SI from stack
+    jmp updateDone
+    
+statusValid:
+    ; Status is valid - update it
+    pop si              ; Restore SI
+    mov [carRented + si], al
+    
+    PrintString CRLF
     PrintString correctMsg
+    jmp updateDone
+    
+invalidPos:
+    PrintString CRLF
+    PrintString invalidPosMsg
+    
+updateDone:
+    PrintString CRLF
     PressKeyToContinue
     jmp startMenu
-RemoveVehicle ENDP
+UpdateAvailability ENDP
 
 ExitProgram PROC
     mov ah, 4Ch
@@ -697,4 +1053,3 @@ ExitProgram PROC
 ExitProgram ENDP
 
 END MAIN
-
