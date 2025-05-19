@@ -2,8 +2,8 @@
 .STACK 100h
 .DATA
 
-    ;Car deets
-    MAX_CARS     EQU 15
+    ;Car deets storage
+    MAX_CARS     EQU 10
     carCount     DW    0
     carPlate     DB    MAX_CARS*8 DUP(' ')
     carMileage   DW    MAX_CARS DUP(0)
@@ -11,11 +11,11 @@
     carSlot      DB    MAX_CARS DUP(0)    ; insertion index
     carRented    DB    MAX_CARS DUP(0)    ; 1=rented, 0=available
 
-    ;buffer
-    plateInput DB 8,0,8 DUP(0)
-    mileInput  DB 5,0,5 DUP(0)
+    ;buffer data entry
+    plateInput DB 8,0,8 DUP(0)  ;max size, actual size, buffer
+    mileInput  DB 5,0,5 DUP(0)  ;max 5 digits
 
-    ;prompt
+    ;User Interface stuff
     correctMsg      DB 'Operation successful$'
     continueMessage DB 'Press a Key to Continue: $'
     wrongInputMsg   DB 'Invalid selection!$'
@@ -29,6 +29,7 @@
     newStatusPrompt DB 'Enter new status (0=Available, 1=Rented): $'
     noVehiclesMsg   DB 'No vehicles in inventory!$'
     invalidPosMsg   DB 'Invalid vehicle position!$'
+    invalidMileageMsg DB 'Error: Mileage must contain only numeric digits!$'
     plateTitle DB 'Plate: $'
     mileageTitle DB 'Mileage: $'
     matchesTitle DB ' Cars Found!$'
@@ -36,7 +37,6 @@
     typeTitle DB 'Type: $'
     rentalTitle DB 'Status: $'
     slotTitle DB 'Vehicle in Slot order: $'
-    
     saloonTitle DB 'Saloon$'
     suvTitle DB 'SUV$'
     sportsTitle DB 'Sports Car$'
@@ -45,9 +45,23 @@
     rentedTitle DB 'Rented$'
     totalVechTitle DB ' Total Vehicles$'
     seperator DB '----------------$'
-
-    ; Main menu definitions
     
+    ;Page stuff
+    carsPerPage    DB    3                 ; Num to display per page
+    currentPage    DB    0                 ; Current page view
+    nextPageMsg    DB    'Next page...$'
+    prevPageMsg    DB    'Previous page...$'
+    noNextPageMsg  DB    'No more pages.$'
+    noPrevPageMsg  DB    'Already at first page.$'
+    vehiclePrefix    DB 'Vehicle $'
+    vehicleOf        DB ' of $'
+    vehicleNavPrompt DB '(N)ext vehicle, (P)revious vehicle, (Q)uit: $'
+    atFirstVehicle   DB 'Already at first vehicle.$'
+    atLastVehicle    DB 'Already at last vehicle.$'
+    updateNavPrompt DB '(N)ext, (P)rev, (S)elect this vehicle, (Q)uit: $'
+    
+
+    ; Main menu
     menuOption1 DB '1) Add New Vehicle$'
     menuOption2 DB '2) List Vehicles by Type$'
     menuOption3 DB '3) View Vehicle by Position$'
@@ -56,7 +70,7 @@
     mainMenu    DW OFFSET menuOption1, OFFSET menuOption2, OFFSET menuOption3, OFFSET menuOption4, OFFSET menuOption5
     mainMenuSize DW 5
 
-    ; List-by-type menu definitions
+    ;Type menu
     listOpt1 DB '1) List Saloons$'
     listOpt2 DB '2) List SUVs$'
     listOpt3 DB '3) List Sports Cars$'
@@ -65,7 +79,8 @@
     listPrompt DB 'Enter a number (1-5)$'
     listMenu DW OFFSET listOpt1, OFFSET listOpt2, OFFSET listOpt3, OFFSET listOpt4,OFFSET listOpt5
     listMenuSize DW 5
-        
+    
+    ;ASCII Car VROOOM
     carArt       DB '            _______', 13, 10
                  DB '           //  ||\ \', 13, 10
                  DB '     _____//___||_\ \___', 13, 10
@@ -73,10 +88,10 @@
                  DB '     |_/ \________/ \___|', 13, 10
                  DB '    ___\_/________\_/______', 13, 10, '$'
     
+    ;Clear
     CRLF DB 13,10,'$'
 
 .CODE
-;-----------------------------
 ; Macros
 DisplayMenu Macro array, count
     LOCAL loopLabel
@@ -174,11 +189,10 @@ startMenu:
     sub al,'0'        
     mov bl, al        
 
-    ; Discard the carriage return from input buffer
+    ; Discard carriage return input buffer
     mov ah,01h
     int 21h
-
-    ; jump to routines based on input
+    
     cmp bl, 1
     jne notOption1
     jmp AddVehicle
@@ -199,13 +213,14 @@ notOption4:
     jne invalidChoice
     jmp ExitProgram
 invalidChoice:
-    ; Invalid choice
     PrintString wrongInputMsg
+    PrintString CRLF
     PressKeyToContinue
     jmp startMenu
 MAIN ENDP
 
-;-----------------------------
+
+;------------
 ; Subroutines
 AddVehicle PROC
     ;capacity
@@ -215,27 +230,53 @@ AddVehicle PROC
     jmp fullLot
 
 notFullLot:
-    ; Input plate number
+    ;plate num
     PrintString platePrompt
     lea dx, plateInput
     mov ah, 0Ah
     int 21h
     PrintString CRLF
     
-    ; Input mileage
+    ;miles
     PrintString mileagePrompt
     lea dx, mileInput
     mov ah, 0Ah
     int 21h
     PrintString CRLF
     
-    ; Input vehicle type
+    ;Validate mileage is numeric
+    xor bx, bx
+    mov bl, [mileInput + 1]  ; length of inpuy
+    cmp bl, 0                ; Check if empty
+    je mileageError1        
+    
+    mov cx, bx               
+    mov si, 2                ; offset 2
+    
+validateMileage:
+    mov al, [mileInput + si] 
+    cmp al, '0'              ; Is character < 0?
+    jb mileageError2         
+    cmp al, '9'              ; Is character > 9?
+    ja mileageError2         
+    inc si                   ; next char
+    loop validateMileage     ; Process all characters
+    jmp mileageValid         
+    
+mileageError1:
+    jmp invalidMileage       
+    
+mileageError2:
+    jmp invalidMileage       
+    
+mileageValid:
+    ;type
     PrintString typePrompt
     mov ah, 01h        
     int 21h
     sub al, '0'        ; Convert ASCII to number
     
-    ; Validate vehicle type (1-4)
+    ; Validate 1-4
     cmp al, 1
     jae typeAtLeast1
     jmp invalidType
@@ -244,43 +285,43 @@ typeAtLeast1:
     jbe typeValid
     jmp invalidType
 typeValid:
-    ; Store vehicle type
+    ; Store
     mov bl, al
     PrintString CRLF
     
-    ; Input rental status
+    ;Status
     PrintString rentalPrompt
     mov ah, 01h
     int 21h
     sub al, '0'        ; Convert ASCII to number
     
-    ; Validate rental status (must be 0 or 1)
+    ; Validate 1 or 0
     cmp al, 0
     je rentalValid
     cmp al, 1
     je rentalValid
-    jmp invalidRental   ; Handle invalid rental status
+    jmp invalidRental  
     
 rentalValid:
-    ; Store rental status
+    ; Store stat
     mov bh, al  ; Save rental status in BH (BL already has vehicle type)
     PrintString CRLF
     
-    ; position to store data
+    ; position to store
     mov si, carCount
-    ; Store car type
+    ; Storetype
     mov di, si
     mov [carType + di], bl
-    ; Store car slot/index
+    ; Store car slot
     mov [carSlot + di], bl
-    ; Store rental status
+    ; Store status
     mov [carRented + di], bh
     
-    ; Store mileage - convert ASCII to binary
+    ; Store mileage -  ASCII to binary
     xor ax, ax
     xor bx, bx
-    mov bl, [mileInput + 1]  ; length of entered string
-    mov cx, bx              ; counter to length
+    mov bl, [mileInput + 1]  ; length string
+    mov cx, bx              ; counter to len
     mov si, 2               ; Start at first digit
 convertMileage:
     xor bx, bx
@@ -295,28 +336,28 @@ convertMileage:
     inc si
     loop convertMileage
     
-    ; Store mileage value
+    ; Store mileage
     mov di, carCount
-    shl di, 1               ; Multiply by 2 since mileage is word-sized
+    shl di, 1               ; Multiply by 2
     mov [carMileage + di], ax
     
-    ; Store plate number
-    mov si, 2               ; Source: plateInput buffer (skip size and length)
+    ; Store plate
+    mov si, 2               ; Source: plateInput buffer 
     mov di, carCount        ; Destination: calculated offset
-    mov cx, 8               ; Maximum plate length
+    mov cx, 8               ; Max length
     mov bx, 0               ; Index counter for destination
     
-    ; Calculate beginning position in carPlate array
+    ; Calc beginning position in carPlate array
     mov ax, carCount
     mov dx, 8
     mul dx
     mov di, ax
     
 copyPlate:
-    ; Check if end of the entered plate
-    mov al, [plateInput + 1]    ; Get length of entered text
-    cmp bl, al                  ; Compare with current position
-    jae padSpace                ; If we're beyond input, pad with spaces
+    ; Check if end of plate
+    mov al, [plateInput + 1]    ; length of  text
+    cmp bl, al                  ; Comp with position
+    jae padSpace                ; If beyond input, pad with spaces
     
     ; Copy character
     mov al, [plateInput + si]
@@ -328,7 +369,7 @@ copyPlate:
     jmp storeDone
     
 padSpace:
-    ; Pad with spaces
+    ; Pad
     mov byte ptr [carPlate + di], ' '
     inc di
     loop padSpace
@@ -336,15 +377,23 @@ padSpace:
 storeDone:
     ; Increment car count
     inc carCount
-    
+    PrintString CRLF
     PrintString correctMsg
     jmp addDone
     
 fullLot:
+    PrintString CRLF
     PrintString fullMsg
     jmp addDone
     
+invalidMileage:
+    PrintString CRLF
+    PrintString invalidMileageMsg 
+    PrintString CRLF
+    jmp addDone
+    
 invalidType:
+    PrintString CRLF
     PrintString wrongInputMsg
     jmp addDone
     
@@ -358,13 +407,11 @@ addDone:
     jmp startMenu
 AddVehicle ENDP
 
-
 ListByType PROC
     PrintString CRLF
     DisplayListMenu listMenu, listMenuSize
     PrintString listPrompt
     
-    ; Get user selection
     mov ah, 01h
     int 21h
     sub al, '0'
@@ -373,7 +420,7 @@ ListByType PROC
     mov ah, 01h
     int 21h
    
-    ;selection is valid (1-5)
+    ;validdate 1-5
     cmp bl, 1
     jge validMin
     jmp invalidListOption
@@ -382,8 +429,6 @@ validMin:
     jle validOption
     jmp invalidListOption
 validOption:
-    
-    ; Return option 5
     cmp bl, 5
     jne notReturnOption
     jmp returnToMenu
@@ -401,12 +446,11 @@ notReturnOption:
     jmp listDone
     
 haveCars:
-    ; Display header
     ClearScreen
     PrintString CRLF
     PrintString CRLF
     
-    ;counter for matches found
+    ;counter for matches
     xor cx, cx
     mov bh, bl      ; Save type in BH 
     
@@ -419,26 +463,23 @@ carTypeLoop:
     jmp endTypeLoop
 continueTypeLoop:
     
-    ; Check if current car matches the requested type
+    ; Check if current car matches with type
     mov di, si
     mov al, [carType + di]
-    cmp al, bh      ; Compare  saved type in BH
+    cmp al, bh      ; Comp  saved type in BH
     je typeMatches
     jmp nextCar
 typeMatches:
     
     ; Match found - increment match counter
     inc cx
-    
-
+  
     lea dx, CRLF
     mov ah, 09h
     int 21h
-    
-    ; Print "Plate: "
     PrintString plateTitle
     
-    ; Print plate number
+    ; Print plate
     push bx         ; BX (contains type)
     push cx         ; CX (match counter)
     push si         ; SI (car index)
@@ -457,10 +498,8 @@ printPlate:
     inc di
     loop printPlate
     
-    ; Print ", Mileage: "
+    
     PrintString mileageTitle
-    
-    
     ; Retrieve car index
     pop si
     push si         ; Keep it on stack
@@ -496,7 +535,6 @@ printDigits:
     dec bl
     jnz printDigits
     
-    ; Print rental status
     PrintString CRLF
     PrintString rentalTitle
     
@@ -576,11 +614,11 @@ ListByType ENDP
 
 
 ViewByPosition PROC
-    ClearScreen
-   
+    ; check any vehicle
     cmp carCount, 0
     jne hasVehicles
     
+    ClearScreen
     PrintString CRLF
     PrintString CRLF
     PrintString wrongInputMsg
@@ -588,45 +626,49 @@ ViewByPosition PROC
     jmp viewDone
     
 hasVehicles:
+    ; Init first vehicle
+    mov si, 0            ; vehicle pos 0
+    
+viewNextVehicle:
+    ClearScreen    
+    
+    ; Check within valid range
+    cmp si, carCount
+    jb showVehicle       ; If si < carCount, show
+    jmp goToEndOfVehicles
+    
+goToEndOfVehicles:
+    jmp endOfVehicles   
+    
+showVehicle:
     PrintString CRLF
     PrintString CRLF
     PrintString slotTitle
     PrintString CRLF
     
-    ; Loop through
-    mov si, 0
-    
-displayLoop:
-    cmp si, carCount
-    jb continueDisplay 
-    jmp displayDone    
-continueDisplay:
-    
-  
     PrintString CRLF
+    PrintString positionTitle 
     
-    PrintString positionTitle
-    
-    ; Print position number - fix the operand type mismatch
-    ; Cannot directly move SI to DL since they're different sizes
-    mov ax, si       ; First move SI to AX (same size)
-    add al, '0'      ; Convert to ASCII 
-    mov dl, al       ; Now move the lower part (AL) to DL
+    ; position number
+    mov ax, si
+    add al, '0'          ; Convert to ASCII
+    mov dl, al
     mov ah, 02h
     int 21h
     
+    ; Display plate
     PrintString CRLF
+    PrintString plateTitle 
+    push si              ; Save position
     
-    PrintString plateTitle
-    
-    push si             
-    
+    ; Calc plate array pos
     mov ax, si
-    mov bx, 8
-    mul bx              ;8 for plate offset
+    mov bx, 8            ; 8 chars per plate
+    mul bx
     mov di, ax
+    ; Print characters
+    mov cx, 8
     
-    mov cx, 8           ; 8 plate
 printPlatePos:
     mov dl, [carPlate + di]
     mov ah, 02h
@@ -634,18 +676,15 @@ printPlatePos:
     inc di
     loop printPlatePos
     
+   
     PrintString CRLF
+    PrintString typeTitle 
     
-
-    PrintString typeTitle
-    
-    ; Restore position
     pop si
-    push si             
+    push si
     
-    ;vehicle type
+    ;type value and display
     mov al, [carType + si]
-    ;type text
     cmp al, 1
     jne notType1
     PrintString saloonTitle
@@ -668,30 +707,28 @@ notType3:
     
 typePrinted:
     PrintString CRLF
-    
-    PrintString mileageTitle
-    
-    ; Restore
+    PrintString mileageTitle 
+   
     pop si
-    push si             ; Keep SI on stack
+    push si
     
-    ;Get mileage
+    ;mileage convert to decimal
     mov di, si
-    shl di, 1           ; word offset
+    shl di, 1            ; Multiply by 2 (word size)
     mov ax, [carMileage + di]
-    ;dec string
+    
+    ; Convert num to string
     mov bx, 10
-    xor cx, cx          ;counter
+    xor cx, cx
     
 countDigitsPos:
     xor dx, dx
     div bx
-    push dx             ; Push remainder
+    push dx
     inc cx
     test ax, ax
     jnz countDigitsPos
     
-    ; Print digits
 printDigitsPos:
     pop dx
     add dl, '0'
@@ -699,16 +736,13 @@ printDigitsPos:
     int 21h
     loop printDigitsPos
     
+    
     PrintString CRLF
-    
-    ; Print rental status
-    PrintString rentalTitle
-    
-    ; Restore SI (car index)
+    PrintString rentalTitle 
     pop si
-    push si             ; Keep SI on stack
+    push si
     
-    ; Get rental status
+    ; Get status and display
     mov al, [carRented + si]
     cmp al, 1
     je isRented
@@ -719,99 +753,191 @@ isRented:
     PrintString rentedTitle
     
 statusPrinted:
-    
-    ; Print divider
     PrintString CRLF
     PrintString seperator
-    
-    ; Restore position index
-    pop si
-    
-    ;next vehicle
-    inc si
-    jmp displayLoop
-    
-displayDone:
     PrintString CRLF
-    PrintString totalVechTitle
+    PrintString CRLF
     
-    ;carCount to decimal string
-    mov ax, carCount
-    mov bx, 10
-    xor cx, cx
+    PrintString vehiclePrefix
     
-countDigitsTotal:
-    xor dx, dx
-    div bx
-    push dx
-    inc cx
-    test ax, ax
-    jnz countDigitsTotal
+    ; Current vehicle position (index + 1)
+    mov ax, si
+    inc ax                    ; 1-based
+    mov bx, 10                ;base-10 division
+    xor cx, cx                
+
+    ;pos number to digit
+    currentPosLoop:
+        xor dx, dx            ; Clear DX
+        div bx                ; AX = AX / 10, DX = remainder
+        push dx               ; Save remainder (current digit)
+        inc cx                ; Count
+        test ax, ax           ;is quotient zero
+        jnz currentPosLoop    ; If not, extract digits
+
+    ; reverse order
+    currentPosPrint:
+        pop dx                ; Get digit
+        add dl, '0'           ; Convert to ASCII
+        mov ah, 02h           
+        int 21h              
+        loop currentPosPrint  ; Repet
     
-printDigitsTotal:
-    pop dx
-    add dl, '0'
-    mov ah, 02h
+    PrintString vehicleOf
+    
+    
+    ; Total vehicles
+    mov ax, carCount          
+    mov bx, 10              
+    xor cx, cx                
+
+
+    totalVehiclesLoop:
+        xor dx, dx          
+        div bx              
+        push dx               
+        inc cx                
+        test ax, ax           
+        jnz totalVehiclesLoop 
+
+    
+    totalVehiclesPrint:
+        pop dx              
+        add dl, '0'           
+        mov ah, 02h           
+        int 21h               
+        loop totalVehiclesPrint 
+        
+    
+    PrintString CRLF
+    PrintString CRLF
+    PrintString vehicleNavPrompt
+    
+    ;user choice
+    mov ah, 01h         ; Read with echo
     int 21h
-    loop printDigitsTotal
+    
+    ;navigation
+    pop si              ; Restore posit
+    
+    cmp al, 'N'         ; Next?
+    je nextVehicle
+    cmp al, 'n'         ; Next? (lowercase)
+    je nextVehicle
+    
+    cmp al, 'P'         ; Previous?
+    je prevVehicle
+    cmp al, 'p'         ; Previous? (lowercase)
+    je prevVehicle
+    
+    ; Any other key
+    jmp viewDone
+    
+nextVehicle:
+    ; Check if next vehicle
+    mov ax, si
+    inc ax
+    cmp ax, carCount
+    jb vehicleInRange    ; If ax < carCount, vehicle in range
+    jmp goToEndOfVehicles
+    
+vehicleInRange:
+    ; Move to next vehicle
+    inc si
+    jmp viewNextVehicle
+    
+prevVehicle:
+    ; Check
+    cmp si, 0
+    jne hasPrevVehicle   ; If si != 0, has a previous vehicle
+    jmp goToStartOfVehicles
+    
+goToStartOfVehicles:
+    jmp startOfVehicles 
+    
+hasPrevVehicle:
+    ; Move prev vehicle
+    dec si
+    jmp viewNextVehicle
+    
+startOfVehicles:
+    PrintString CRLF
+    PrintString CRLF
+    PrintString atFirstVehicle
+    PressKeyToContinue
+    jmp viewNextVehicle
+    
+endOfVehicles:
+    PrintString CRLF
+    PrintString CRLF
+    PrintString atLastVehicle
+    PressKeyToContinue
+    jmp viewDone
     
 viewDone:
     PrintString CRLF
     PrintString CRLF
     PressKeyToContinue
-    jmp startMenu        ; Always go back to the main menu
+    jmp startMenu        
 ViewByPosition ENDP
 
+
 UpdateAvailability PROC
-    ; Check if there are any vehicles
+    ;check any vehicles
     cmp carCount, 0
     jne hasVehiclesUpdate
+    
     
     PrintString CRLF
     PrintString noVehiclesMsg
     jmp updateDone
     
 hasVehiclesUpdate:
-    ; First display all vehicles
-    ClearScreen
-    PrintString CRLF
-    PrintString CRLF
-    PrintString slotTitle
-    PrintString CRLF
+    ; Init first vehicle
+    mov si, 0            ; pos 0
     
-    ; Loop through vehicles
-    mov si, 0
+viewNextUpdateVehicle:
+    ClearScreen          ; Clear
     
-displayUpdateLoop:
+    ; Check within range
     cmp si, carCount
-    jb continueUpdateDisplay
-    jmp displayUpdateDone    
-continueUpdateDisplay:
+    jb showUpdateVehicle ; If si < carCount, show vehicle
+    jmp goToEndOfUpdates 
     
+goToEndOfUpdates:
+    jmp endOfUpdates     ;
+    
+showUpdateVehicle:
+    PrintString CRLF
+    PrintString CRLF
+    PrintString slotTitle 
     PrintString CRLF
     
-    PrintString positionTitle
+   
+    PrintString CRLF
+    PrintString positionTitle 
     
-    ; Print position number
-    mov ax, si       
-    add al, '0'      
-    mov dl, al       
+    ;pos number
+    mov ax, si
+    add al, '0'          ; Convert to ASCII
+    mov dl, al
     mov ah, 02h
     int 21h
     
-    PrintString CRLF
     
+    PrintString CRLF
     PrintString plateTitle
     
-    push si             
+    push si              ; Save position
     
+    ; Calc plate arr pos
     mov ax, si
-    mov bx, 8
-    mul bx              
+    mov bx, 8            ; 8 chars per plate
+    mul bx
     mov di, ax
     
-    mov cx, 8           
-    
+    ; Printcharacters
+    mov cx, 8
 printPlateUpdate:
     mov dl, [carPlate + di]
     mov ah, 02h
@@ -819,17 +945,14 @@ printPlateUpdate:
     inc di
     loop printPlateUpdate
     
+   
     PrintString CRLF
-    
     PrintString typeTitle
     
-    ; Restore position
     pop si
-    push si             
+    push si
     
-    ; Vehicle type
     mov al, [carType + si]
-    ; Type text
     cmp al, 1
     jne notUpdateType1
     PrintString saloonTitle
@@ -851,27 +974,26 @@ notUpdateType3:
     PrintString truckTitle
     
 updateTypePrinted:
+
     PrintString CRLF
-    
     PrintString mileageTitle
     
-    ; Restore
     pop si
-    push si             
+    push si
     
-    ; Get mileage
+    ; mileage convert to decimal
     mov di, si
-    shl di, 1           
+    shl di, 1            ; Multiply by 2 (word size)
     mov ax, [carMileage + di]
     
-    ; Decimal string
+    ; numb to string
     mov bx, 10
-    xor cx, cx          
+    xor cx, cx
     
 updateCountDigits:
     xor dx, dx
     div bx
-    push dx             
+    push dx
     inc cx
     test ax, ax
     jnz updateCountDigits
@@ -883,16 +1005,14 @@ updatePrintDigits:
     int 21h
     loop updatePrintDigits
     
+    
     PrintString CRLF
+    PrintString rentalTitle 
     
-    ; Print rental status
-    PrintString rentalTitle
-    
-    ; Restore SI (car index)
     pop si
-    push si             
+    push si
     
-    ; Get rental status
+    ;rental status and display
     mov al, [carRented + si]
     cmp al, 1
     je updateIsRented
@@ -904,84 +1024,184 @@ updateIsRented:
     
 updateStatusPrinted:
     
-    ; Print divider
     PrintString CRLF
     PrintString seperator
     
-    ; Restore position index
-    pop si
-    
-    ; Next vehicle
-    inc si
-    jmp displayUpdateLoop
-    
-displayUpdateDone:
+ 
     PrintString CRLF
-    PrintString totalVechTitle
+    PrintString CRLF
     
-    ; carCount to decimal string
-    mov ax, carCount
-    mov bx, 10
-    xor cx, cx
     
-updateCountTotal:
-    xor dx, dx
-    div bx
-    push dx
-    inc cx
-    test ax, ax
-    jnz updateCountTotal
+    PrintString vehiclePrefix
     
-updatePrintTotal:
-    pop dx
-    add dl, '0'
-    mov ah, 02h
+    ; Current vehicle position (index + 1)
+    mov ax, si
+    inc ax                    ;1-based
+    mov bx, 10                ;same as below
+    xor cx, cx                
+
+    ; Convert position number to digits
+    positionLoop:
+        xor dx, dx            
+        div bx                
+        push dx               
+        inc cx                
+        test ax, ax           
+        jnz positionLoop      
+
+   
+    positionPrint:
+        pop dx                
+        add dl, '0'           
+        mov ah, 02h           ;
+        int 21h               
+        loop positionPrint    ;
+    
+    PrintString vehicleOf
+    
+    ; Total vehicles
+    mov ax, carCount          ; Get total vehicles
+    mov bx, 10                ; Set up for base-10 division
+    xor cx, cx                ; Clear counter for digits
+
+    ; Convert number to digits by repeatedly dividing by 10
+    updateTotalVehiclesLoop:
+        xor dx, dx            ; Clear DX for division
+        div bx                ; AX = AX / 10, DX = remainder
+        push dx               ; Save remainder (current digit)
+        inc cx                ; Count this digit
+        test ax, ax           ; Check if quotient is zero
+        jnz updateTotalVehiclesLoop ; If not, extracting digits
+
+    ; Print digits in reverse order (most significant first)
+    updateTotalVehiclesPrint:
+        pop dx                ; Get digit
+        add dl, '0'           ; Convert to ASCII
+        mov ah, 02h           ; DOS: print character
+        int 21h               ; Print digit
+        loop updateTotalVehiclesPrint ; Repeat for all digits
+    
+    
+    PrintString CRLF
+    PrintString CRLF
+    
+    
+    PrintString updateNavPrompt
+    
+    ;user choice
+    mov ah, 01h         ; Read w echo
     int 21h
-    loop updatePrintTotal
     
-    ; Now ask for position to update
+    ;Nav
+    pop si              ;pos index
+    
+    cmp al, 'N'         ; Next?
+    je nextUpdateVehicle
+    cmp al, 'n'         ; Next? (lowercase)
+    je nextUpdateVehicle
+    
+    cmp al, 'P'         ; Previous?
+    je prevUpdateVehicle
+    cmp al, 'p'         ; Previous? (lowercase)
+    je prevUpdateVehicle
+    
+    cmp al, 'S'         ; Select this vehicle?
+    je selectThisVehicle
+    cmp al, 's'         ; Select this vehicle? (lowercase)
+    je selectThisVehicle
+    
+    ;quit and return to menu
+    jmp updateDone
+    
+nextUpdateVehicle:
+    ; Check if has next vehicle
+    mov ax, si
+    inc ax
+    cmp ax, carCount
+    jb updateVehicleInRange ; If ax < carCount, vehicle in range
+    jmp goToEndOfUpdates
+    
+updateVehicleInRange:
+    ; Move to next vehicle
+    inc si
+    jmp viewNextUpdateVehicle
+    
+prevUpdateVehicle:
+    ; Checkhave previous vehicle
+    cmp si, 0
+    jne hasPrevUpdateVehicle ; If si != 0, have prev vehicle
+    jmp goToStartOfUpdates
+    
+goToStartOfUpdates:
+    jmp startOfUpdates      
+    
+hasPrevUpdateVehicle:
+    ;move prev vehicle
+    dec si
+    jmp viewNextUpdateVehicle
+    
+startOfUpdates:
+    PrintString CRLF
+    PrintString CRLF
+    PrintString atFirstVehicle
+    PrintString CRLF
+    PressKeyToContinue
+    jmp viewNextUpdateVehicle
+    
+endOfUpdates:
+    PrintString CRLF
+    PrintString CRLF
+    PrintString atLastVehicle
+    PressKeyToContinue
+    
+    ;give option to select a position
+    jmp promptForPosition
+    
+selectThisVehicle:
+    ;cont with this position in SI
+    jmp toggleVehicle
+    
+promptForPosition:
+    ClearScreen
     PrintString CRLF
     PrintString CRLF
     PrintString updatePrompt
     
-    ; Get the position from user
+    ; Get the pos
     mov ah, 01h
     int 21h
-    sub al, '0'        ; Convert ASCII to number
+    sub al, '0'
     
-    ; Validate position (must be between 0 and carCount-1)
+    ; Validate pos (0 to carCount-1)
     cmp al, 0
     jge posAtLeastZero
-    ; If position < 0, it's invalid
     jmp invalidPos
     
 posAtLeastZero:
-    ; Create a copy of carCount in BL for comparison
     mov bx, carCount
-    dec bx              ; BX = carCount - 1
+    dec bx
     
     cmp al, bl
     jle posValid
-    ; If position > carCount-1, it's invalid
     jmp invalidPos
     
 posValid:
-    ; Position is valid - store it in SI
-    mov ah, 0           ; Clear high bits of AX
+    ; Positionvalid - store SI
+    mov ah, 0
     mov si, ax
     
-    ; Display the current status of the vehicle
+toggleVehicle:
+    ClearScreen
+    PrintString CRLF
     PrintString CRLF
     PrintString plateTitle
     
-    ; Calculate position in carPlate array
-    push si             ; Save SI
+    push si
     mov ax, si
     mov bx, 8
     mul bx
     mov di, ax
     
-    ; Print plate
     mov cx, 8
 printPlateSelected:
     mov dl, [carPlate + di]
@@ -994,45 +1214,38 @@ printPlateSelected:
     PrintString CRLF
     PrintString rentalTitle
     
-    pop si              ; Restore SI
-    push si             ; Save it again
+    pop si
     
     mov al, [carRented + si]
+    mov bl, al
     cmp al, 1
     je currentlyRented
     PrintString availableTitle
-    jmp promptNewStatus
+    jmp toggleStatus
     
 currentlyRented:
     PrintString rentedTitle
     
-promptNewStatus:
-    ; Ask for new status
+toggleStatus:
+    ; Toggle the rental status
+    xor bl, 1                 ; Flip using XOR
+    mov [carRented + si], bl  ; Store new status
+    
+    ; Display new status
     PrintString CRLF
-    PrintString newStatusPrompt
+    PrintString rentalTitle
     
-    ; Get new status
-    mov ah, 01h
-    int 21h
-    sub al, '0'        ; Convert ASCII to number
+    ; Check new status and display
+    cmp bl, 1
+    je nowRented
+    PrintString availableTitle
+    jmp statusToggled
     
-    ; Validate new status (must be 0 or 1)
-    cmp al, 0
-    je statusValid
-    cmp al, 1
-    je statusValid
+nowRented:
+    PrintString rentedTitle
     
-    ; Invalid status
-    PrintString CRLF
-    PrintString wrongInputMsg
-    pop si              ; Remove SI from stack
-    jmp updateDone
-    
-statusValid:
-    ; Status is valid - update it
-    pop si              ; Restore SI
-    mov [carRented + si], al
-    
+statusToggled:
+    ; Success message
     PrintString CRLF
     PrintString correctMsg
     jmp updateDone
