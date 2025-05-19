@@ -8,12 +8,12 @@
     carPlate     DB    MAX_CARS*8 DUP(' ')
     carMileage   DW    MAX_CARS DUP(0)
     carType      DB    MAX_CARS DUP(0) 
-    carSlot      DB    MAX_CARS DUP(0)    ; insertion index
+    carSlot      DB    MAX_CARS DUP(0)    
     carRented    DB    MAX_CARS DUP(0)    ; 1=rented, 0=available
 
     ;buffer data entry
-    plateInput DB 8,0,8 DUP(0)  ;max size, actual size, buffer
-    mileInput  DB 5,0,5 DUP(0)  ;max 5 digits
+    plateInput DB 8,0,8 DUP(0)  ;maxsize, size, buff
+    mileInput  DB 5,0,5 DUP(0)  ;max 5 dig
 
     ;User Interface stuff
     correctMsg      DB 'Operation successful$'
@@ -47,17 +47,15 @@
     seperator DB '----------------$'
     
     ;Page stuff
-    carsPerPage    DB    3                 ; Num to display per page
-    currentPage    DB    0                 ; Current page view
-    nextPageMsg    DB    'Next page...$'
-    prevPageMsg    DB    'Previous page...$'
-    noNextPageMsg  DB    'No more pages.$'
-    noPrevPageMsg  DB    'Already at first page.$'
-    vehiclePrefix    DB 'Vehicle $'
-    vehicleOf        DB ' of $'
+    nextPageMsg DB    'Next page...$'
+    prevPageMsg DB    'Previous page...$'
+    noNextPageMsg DB    'No more pages.$'
+    noPrevPageMsg DB    'Already at first page.$'
+    vehiclePrefix DB 'Vehicle $'
+    vehicleOf  DB ' of $'
     vehicleNavPrompt DB '(N)ext vehicle, (P)revious vehicle, (Q)uit: $'
-    atFirstVehicle   DB 'Already at first vehicle.$'
-    atLastVehicle    DB 'Already at last vehicle.$'
+    atFirstVehicle DB 'Already at first vehicle.$'
+    atLastVehicle  DB 'Already at last vehicle.$'
     updateNavPrompt DB '(N)ext, (P)rev, (S)elect this vehicle, (Q)uit: $'
     
 
@@ -67,7 +65,7 @@
     menuOption3 DB '3) View Vehicle by Position$'
     menuOption4 DB '4) Update Vehicle Availability$'
     menuOption5 DB '5) Exit Program$'
-    mainMenu    DW OFFSET menuOption1, OFFSET menuOption2, OFFSET menuOption3, OFFSET menuOption4, OFFSET menuOption5
+    mainMenu DW OFFSET menuOption1, OFFSET menuOption2, OFFSET menuOption3, OFFSET menuOption4, OFFSET menuOption5
     mainMenuSize DW 5
 
     ;Type menu
@@ -221,9 +219,8 @@ MAIN ENDP
 
 
 ;------------
-; Subroutines
+;Procedures
 AddVehicle PROC
-    ;capacity
     mov ax, carCount
     cmp ax, MAX_CARS
     jb notFullLot
@@ -244,7 +241,7 @@ notFullLot:
     int 21h
     PrintString CRLF
     
-    ;Validate mileage is numeric
+    ;Validate mileage
     xor bx, bx
     mov bl, [mileInput + 1]  ; length of inpuy
     cmp bl, 0                ; Check if empty
@@ -433,9 +430,7 @@ validOption:
     jne notReturnOption
     jmp returnToMenu
 notReturnOption:
-    
-    ; bl selected vehicle type 
-    ; Check if any vehicles exist
+    ; Check any vehicles exist
     cmp carCount, 0
     jne haveCars
     PrintString CRLF
@@ -453,8 +448,6 @@ haveCars:
     ;counter for matches
     xor cx, cx
     mov bh, bl      ; Save type in BH 
-    
-    ; Loop
     mov si, 0
     
 carTypeLoop:
@@ -463,10 +456,10 @@ carTypeLoop:
     jmp endTypeLoop
 continueTypeLoop:
     
-    ; Check if current car matches with type
+    ; Check if current matches with type
     mov di, si
     mov al, [carType + di]
-    cmp al, bh      ; Comp  saved type in BH
+    cmp al, bh      ; Comp  saved type
     je typeMatches
     jmp nextCar
 typeMatches:
@@ -480,16 +473,16 @@ typeMatches:
     PrintString plateTitle
     
     ; Print plate
-    push bx         ; BX (contains type)
-    push cx         ; CX (match counter)
-    push si         ; SI (car index)
+    push bx         ; BX -contains type
+    push cx         ; CX - match counter
+    push si         ; SI -car index
     
     mov ax, si
     mov bx, 8
     mul bx
     mov di, ax
     
-    mov cx, 8       ; Set loop counter for plate chars
+    mov cx, 8       ;loop counter for plate char
     
 printPlate:
     mov dl, [carPlate + di]
@@ -500,17 +493,15 @@ printPlate:
     
     
     PrintString mileageTitle
-    ; Retrieve car index
     pop si
-    push si         ; Keep it on stack
+    push si      
     
-    ; Print mileage
     mov di, si
-    shl di, 1       ; Multiply by 2 because mileage is a word
+    shl di, 1       ; Multiply by 2
     mov ax, [carMileage + di]
     
-    ; Convert number to string
-    ; First, determine number of digits by dividing by 10 repeatedly
+    ;num to string
+    ;divide 10 repeatedly
     mov bx, 10
     xor dx, dx
     mov cx, 0       ; Digit counter
@@ -538,9 +529,9 @@ printDigits:
     PrintString CRLF
     PrintString rentalTitle
     
-    ; Get rental status
-    pop si          ; Restore SI (car index)
-    push si         ; Keep it on stack again
+    ;getrental status
+    pop si          
+    push si       
     
     mov al, [carRented + si]
     cmp al, 1
@@ -554,9 +545,9 @@ isRentedList:
 statusPrintedList:
     
     ; Restore 
-    pop si          ; Restore SI (car index)
-    pop cx          ; Restore CX (match counter)
-    pop bx          ; Restore BX (type)
+    pop si          ;SI (car index)
+    pop cx          ;CX (match counter)
+    pop bx          ;BX (type)
     
 nextCar:
     inc si
@@ -575,7 +566,7 @@ matchesFound:
     PrintString CRLF
     PrintString CRLF
     
-    ; Convert match count to ASCII digits
+    ;match count to ASCII digits
     mov ax, cx
     mov bx, 10
     xor cx, cx
