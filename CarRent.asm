@@ -376,12 +376,12 @@ convertMileage:
     mov di, ax
     
 copyPlate:
-    ; Check if end of plate
-    mov al, [plateInput + 1]    ; length of  text
-    cmp bl, al                  ; Comp with position
+    ; Check if end
+    mov al, [plateInput + 1]    ; len
+    cmp bl, al                  ; Comp  position
     jae padSpace                ; If beyond input, pad with spaces
     
-    ; Copy character
+    ; Copy chars
     mov al, [plateInput + si]
     mov [carPlate + di], al
     inc si
@@ -391,7 +391,6 @@ copyPlate:
     jmp storeDone
     
 padSpace:
-    ; Pad
     mov byte ptr [carPlate + di], ' '
     inc di
     loop padSpace
@@ -792,7 +791,7 @@ statusPrinted:
     PrintString vehicleNavPrompt
     
     ;user choice
-    mov ah, 01h         ; Read with echo
+    mov ah, 01h         ; Read
     int 21h
     
     ;navigation
@@ -1029,8 +1028,7 @@ updateStatusPrinted:
     
     PrintString updateNavPrompt
     
-    ;user choice
-    mov ah, 01h         ; Read w echo
+    mov ah, 01h         ; Read char
     int 21h
     
     ;Nav
@@ -1171,7 +1169,7 @@ toggleStatus:
     xor bl, 1                 ; Flip using XOR
     mov [carRented + si], bl  ; Store new status
     
-    ; Display new status
+    ;new status
     PrintString CRLF
     PrintString rentalTitle
     
