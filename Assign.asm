@@ -1,3 +1,4 @@
+;Car Rental System - Alfiansyah Max Bannatyne Clark TP075566
 .MODEL SMALL
 .STACK 100h
 .DATA
@@ -11,7 +12,7 @@
     carSlot      DB    MAX_CARS DUP(0)    
     carRented    DB    MAX_CARS DUP(0)    ; 1=rented, 0=available
 
-    ;buffer data entry
+    ;buffers for inputs
     plateInput DB 8,0,8 DUP(0)  ;maxsize, size, buff
     mileInput  DB 5,0,5 DUP(0)  ;max 5 dig
 
@@ -145,7 +146,31 @@ printPlateInput Macro msg
     mov ah,09
     int 21h
 EndM
+
+; convert a number to ASCII
+PrintNumberInAX Macro
+    LOCAL digitLoop, printLoop
+    push ax              ;Save AX
+    mov bx, 10           ;Base-10 division
+    xor cx, cx           ;clear
     
+digitLoop:
+    xor dx, dx           ;Clear DX
+    div bx               ;AX = AX / 10, DX = remainder
+    push dx              ;Save remainder
+    inc cx               ;Count remainder
+    test ax, ax          ;Check quotient is zero
+    jnz digitLoop        ;If not, continue extracting digits
+    
+printLoop:
+    pop dx               ; Get digit
+    add dl, '0'          ; Convert to ASCII
+    mov ah, 02h          
+    int 21h              
+    loop printLoop       ; Repeat 
+    
+    pop ax               ; Restore og AX
+EndM
 
 ClearScreen Macro
     ; Save registers
@@ -304,7 +329,7 @@ rentalValid:
     mov bh, al  ; Save rental status in BH (BL already has vehicle type)
     PrintString CRLF
     
-    ; position to store
+    ; position
     mov si, carCount
     ; Storetype
     mov di, si
@@ -754,51 +779,13 @@ statusPrinted:
     ; Current vehicle position (index + 1)
     mov ax, si
     inc ax                    ; 1-based
-    mov bx, 10                ;base-10 division
-    xor cx, cx                
-
-    ;pos number to digit
-    currentPosLoop:
-        xor dx, dx            ; Clear DX
-        div bx                ; AX = AX / 10, DX = remainder
-        push dx               ; Save remainder (current digit)
-        inc cx                ; Count
-        test ax, ax           ;is quotient zero
-        jnz currentPosLoop    ; If not, extract digits
-
-    ; reverse order
-    currentPosPrint:
-        pop dx                ; Get digit
-        add dl, '0'           ; Convert to ASCII
-        mov ah, 02h           
-        int 21h              
-        loop currentPosPrint  ; Repet
+    PrintNumberInAX
     
     PrintString vehicleOf
     
-    
     ; Total vehicles
     mov ax, carCount          
-    mov bx, 10              
-    xor cx, cx                
-
-
-    totalVehiclesLoop:
-        xor dx, dx          
-        div bx              
-        push dx               
-        inc cx                
-        test ax, ax           
-        jnz totalVehiclesLoop 
-
-    
-    totalVehiclesPrint:
-        pop dx              
-        add dl, '0'           
-        mov ah, 02h           
-        int 21h               
-        loop totalVehiclesPrint 
-        
+    PrintNumberInAX
     
     PrintString CRLF
     PrintString CRLF
@@ -1027,51 +1014,14 @@ updateStatusPrinted:
     
     ; Current vehicle position (index + 1)
     mov ax, si
-    inc ax                    ;1-based
-    mov bx, 10                ;same as below
-    xor cx, cx                
-
-    ; Convert position number to digits
-    positionLoop:
-        xor dx, dx            
-        div bx                
-        push dx               
-        inc cx                
-        test ax, ax           
-        jnz positionLoop      
-
-   
-    positionPrint:
-        pop dx                
-        add dl, '0'           
-        mov ah, 02h           ;
-        int 21h               
-        loop positionPrint    ;
+    inc ax                    ; 1-based
+    PrintNumberInAX
     
     PrintString vehicleOf
     
     ; Total vehicles
     mov ax, carCount          ; Get total vehicles
-    mov bx, 10                ; Set up for base-10 division
-    xor cx, cx                ; Clear counter for digits
-
-    ; Convert number to digits by repeatedly dividing by 10
-    updateTotalVehiclesLoop:
-        xor dx, dx            ; Clear DX for division
-        div bx                ; AX = AX / 10, DX = remainder
-        push dx               ; Save remainder (current digit)
-        inc cx                ; Count this digit
-        test ax, ax           ; Check if quotient is zero
-        jnz updateTotalVehiclesLoop ; If not, extracting digits
-
-    ; Print digits in reverse order (most significant first)
-    updateTotalVehiclesPrint:
-        pop dx                ; Get digit
-        add dl, '0'           ; Convert to ASCII
-        mov ah, 02h           ; DOS: print character
-        int 21h               ; Print digit
-        loop updateTotalVehiclesPrint ; Repeat for all digits
-    
+    PrintNumberInAX
     
     PrintString CRLF
     PrintString CRLF
@@ -1201,10 +1151,9 @@ printPlateSelected:
     inc di
     loop printPlateSelected
     
-    ; Print current status
     PrintString CRLF
     PrintString rentalTitle
-    
+    ;Print status
     pop si
     
     mov al, [carRented + si]
